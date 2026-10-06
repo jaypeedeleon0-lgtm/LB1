@@ -35,10 +35,6 @@ ask_secret() {
 }
 
 # Compute a SHA-256 fingerprint of this machine's hardware identifiers.
-# Sources: system UUID (DMI/SMBIOS), primary MAC, systemd machine-id.
-# A full-disk clone on a different physical/virtual host will produce a
-# different fingerprint; a clone with identical hardware IDs (same VM snapshot
-# on the same host) requires an online license check (Phase 5).
 _machine_fingerprint() {
   local _uuid _mac _mid
   _uuid=$(cat /sys/class/dmi/id/product_uuid 2>/dev/null \
@@ -47,8 +43,8 @@ _machine_fingerprint() {
   _mac=$(ip link show 2>/dev/null | awk '/link\/ether/{print $2; exit}' \
          || echo "unknown-mac")
   _mid=$(cat /etc/machine-id 2>/dev/null \
-         || cat /var/lib/dbus/machine-id 2>/dev/null \
-         || echo "unknown-mid")
+          || cat /var/lib/dbus/machine-id 2>/dev/null \
+          || echo "unknown-mid")
   printf '%s|%s|%s' "$_uuid" "$_mac" "$_mid" | sha256sum | awk '{print $1}'
 }
 
@@ -79,21 +75,17 @@ done
 
 # ─── Shared teardown function ────────────────────────────────────────────────
 _teardown() {
-  # Detect compose command
   if docker compose version >/dev/null 2>&1; then _DC="docker compose"
   elif command -v docker-compose >/dev/null 2>&1; then _DC="docker-compose"
   else _DC=""; fi
 
   section "Tearing down existing installation"
 
-  # 1. Graceful compose shutdown (removes compose-managed volumes)
   if [[ -n "$_DC" ]]; then
     $_DC down --volumes --remove-orphans 2>/dev/null || true
     ok "Compose stack stopped"
   fi
 
-  # 2. Force-stop any lingering netcore containers that compose may have missed
-  #    (handles renamed project, leftover containers from old installs, etc.)
   local _lingering
   _lingering=$(docker ps -a --format '{{.Names}}' \
     | grep -E '^(netcore[-_]|ipoe[-_])?(api|web|postgres|redis|nginx|updater)[-_]?[0-9]*$' \
@@ -103,8 +95,6 @@ _teardown() {
     ok "Lingering containers removed"
   fi
 
-  # 3. Explicitly remove known volumes by both old and new naming conventions
-  #    (compose prefixes volumes with the project/directory name)
   local _vols=(
     netcore_pgdata   netcore_redisdata
     ipoe_pgdata      ipoe_redisdata
@@ -114,20 +104,17 @@ _teardown() {
     docker volume rm "$_v" 2>/dev/null && ok "Volume removed: $_v" || true
   done
 
-  # 4. Remove images: old locally-built (netcore-*) AND ghcr images (ghcr.io/*/netcore-*)
   docker images --format '{{.Repository}}:{{.Tag}}' \
     | grep -E '(^netcore-|/netcore-)' \
     | xargs -r docker rmi -f 2>/dev/null || true
   ok "Project images removed"
 
-  # 5. Remove .env so the interactive setup runs fresh
   if [[ -f .env ]]; then
     rm -f .env
     ok ".env removed"
   fi
 }
 
-# ─── --clean: wipe only, then exit ───────────────────────────────────────────
 if [[ "$CLEAN_ONLY" == "true" ]]; then
   echo -e "\n${BOLD}${RED}╔══════════════════════════════════════════════╗${NC}"
   echo -e "${BOLD}${RED}║   ⚠  CLEAN — ALL DATA WILL BE LOST      ⚠   ║${NC}"
@@ -151,7 +138,6 @@ if [[ "$CLEAN_ONLY" == "true" ]]; then
   exit 0
 fi
 
-# ─── --reinstall: wipe then continue with fresh install ──────────────────────
 if [[ "$REINSTALL" == "true" ]]; then
   echo -e "\n${BOLD}${RED}╔══════════════════════════════════════════════╗${NC}"
   echo -e "${BOLD}${RED}║   ⚠  REINSTALL — ALL DATA WILL BE LOST  ⚠   ║${NC}"
@@ -177,7 +163,6 @@ fi
 # ─── 1. Prerequisites ────────────────────────────────────────────────────────
 section "Checking prerequisites"
 
-# ── Helper: detect apt/dnf/yum package manager ──────────────────────────────
 _pm() {
   if command -v apt-get >/dev/null 2>&1; then echo apt
   elif command -v dnf >/dev/null 2>&1;   then echo dnf
@@ -185,7 +170,6 @@ _pm() {
   else echo ""; fi
 }
 
-# ── Auto-install Docker if missing ──────────────────────────────────────────
 if ! command -v docker >/dev/null 2>&1; then
   warn "Docker not found — installing via get.docker.com …"
   if command -v curl >/dev/null 2>&1; then
@@ -195,20 +179,17 @@ if ! command -v docker >/dev/null 2>&1; then
   else
     die "Neither curl nor wget found. Cannot download Docker installer."
   fi
-  # Add current user to docker group (effective on next login; daemon runs as root here)
   usermod -aG docker "${SUDO_USER:-root}" 2>/dev/null || true
   command -v docker >/dev/null 2>&1 || die "Docker installation failed."
   ok "Docker installed"
 fi
 
-# ── Ensure Docker daemon is running ─────────────────────────────────────────
 if ! docker info >/dev/null 2>&1; then
   warn "Docker daemon not running — starting it …"
   systemctl enable --now docker >/dev/null 2>&1 \
     || die "Failed to start Docker daemon. Run: systemctl start docker"
 fi
 
-# ── Prefer 'docker compose' (v2 plugin); fall back to 'docker-compose' (v1) ─
 if docker compose version >/dev/null 2>&1; then
   DC="docker compose"
 elif command -v docker-compose >/dev/null 2>&1; then
@@ -228,7 +209,6 @@ else
   ok "Docker Compose installed"
 fi
 
-# ── Auto-install openssl if missing ─────────────────────────────────────────
 if ! command -v openssl >/dev/null 2>&1; then
   warn "openssl not found — installing …"
   _PKG=$(_pm)
@@ -253,7 +233,6 @@ if [[ -f .env ]]; then
   warn ".env already exists — skipping interactive setup."
   warn "Delete .env and re-run to reconfigure, or edit it manually."
 else
-  # Detect sensible defaults
   DEFAULT_IP=$(ip route get 8.8.8.8 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' \
                || hostname -I 2>/dev/null | awk '{print $1}' \
                || echo "localhost")
@@ -275,12 +254,11 @@ else
 
   echo ""
   echo -e "  ${BOLD}License${NC} — required to pull the published containers."
-  IMAGE_REGISTRY="ghcr.io/mamamoblue52"
+  IMAGE_REGISTRY="ghcr.io/jaypeedeleon0-lgtm"
   IMAGE_TAG="latest"
-  GHCR_USER="mamamoblue52"
+  GHCR_USER="jaypeedeleon0-lgtm"
   ask_secret "License key"                                           GHCR_TOKEN
 
-  # Generate strong random secrets
   PG_PASS=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
   JWT_SEC=$(openssl rand -hex 32)
   JWT_REF=$(openssl rand -hex 32)
@@ -289,7 +267,6 @@ else
   echo ""
   ask "Database password (auto-generated, press Enter to use)" "$PG_PASS" PG_PASS
 
-  # Compose the full ShapedDevices.csv path
   LIBREQOS_CSV="${LIBREQOS_DIR%/}/ShapedDevices.csv"
 
   UPDATE_SECRET=$(openssl rand -hex 32)
@@ -297,8 +274,6 @@ else
 
   cat > .env <<EOF
 # ── Machine binding ──────────────────────────────────────────────────────────
-# Generated at install time from this host's hardware identifiers.
-# Do NOT copy this value to another machine — it will be rejected.
 MACHINE_FINGERPRINT=${MACHINE_FP}
 
 # ── Database ────────────────────────────────────────────────────────────────
@@ -353,12 +328,10 @@ EOF
   chmod 600 .env
 fi
 
-# Source key values for use later in the script
 SERVER_HOST=$(grep '^SERVER_HOST=' .env | cut -d= -f2-)
 ADMIN_EMAIL=$(grep 'SEED_ADMIN_EMAIL'    .env | cut -d= -f2-)
 ADMIN_PASS=$(grep  'SEED_ADMIN_PASSWORD' .env | cut -d= -f2-)
 
-# ─── Machine binding verification ────────────────────────────────────────────
 _STORED_FP=$(grep '^MACHINE_FINGERPRINT=' .env 2>/dev/null | cut -d= -f2- || true)
 if [[ -n "$_STORED_FP" ]]; then
   _CURRENT_FP=$(_machine_fingerprint)
@@ -369,32 +342,25 @@ if [[ -n "$_STORED_FP" ]]; then
     echo -e "${BOLD}${RED}╚══════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "  This installation is bound to a different machine."
-    echo -e "  Running a cloned installation on unauthorized hardware"
-    echo -e "  is not permitted."
-    echo ""
-    echo -e "  Contact ${BOLD}John Cabanding${NC} for a new installation."
     echo ""
     die "Machine fingerprint mismatch. Aborted."
   fi
   ok "Machine binding verified"
 else
-  # Old install (pre-binding feature) — register this machine now.
   _CURRENT_FP=$(_machine_fingerprint)
   echo "" >> .env
-  echo "# ── Machine binding (added on upgrade) ──────────────────────────────────"  >> .env
+  echo "# ── Machine binding ──────────────────────────────────────────────────"  >> .env
   echo "MACHINE_FINGERPRINT=${_CURRENT_FP}" >> .env
   ok "Machine fingerprint registered for this host"
 fi
 
-# ─── 3. Updater webhook service ──────────────────────────────────────────────
 section "Configuring in-app updater"
 
-# Ensure UPDATE_WEBHOOK_SECRET exists in .env (handles upgrades from older installs)
 if ! grep -q 'UPDATE_WEBHOOK_SECRET' .env; then
   _NEW_SECRET=$(openssl rand -hex 32)
   cat >> .env <<ENVEOF
 
-# ── In-app updater (Docker service — must match this repo's host path) ───────
+# ── In-app updater ──────────────────────────────────────────────────────────
 REPO_DIR=${SCRIPT_DIR}
 UPDATE_WEBHOOK_URL=http://updater:9099
 UPDATE_WEBHOOK_SECRET=${_NEW_SECRET}
@@ -402,28 +368,24 @@ ENVEOF
   ok "UPDATE_WEBHOOK_SECRET generated and added to .env"
 fi
 
-# Ensure REPO_DIR is set (needed by the updater Docker service for bind-mount)
 if ! grep -q '^REPO_DIR=' .env; then
   echo "REPO_DIR=${SCRIPT_DIR}" >> .env
   ok "REPO_DIR added to .env (${SCRIPT_DIR})"
 fi
 
-# Upgrade: swap old host.docker.internal URL for the Docker-internal service name
 sed -i 's|UPDATE_WEBHOOK_URL=http://host.docker.internal:9099|UPDATE_WEBHOOK_URL=http://updater:9099|' .env
 ok "Updater configured (runs as 'updater' Docker service)"
 
-# ─── Migrate older (source-build) installs to image-based distribution ───────
-# Older .env files baked NEXT_PUBLIC_API_URL and had no registry settings.
 if grep -q '^NEXT_PUBLIC_API_URL=' .env && ! grep -q '^SERVER_HOST=' .env; then
   _OLD_HOST=$(grep '^NEXT_PUBLIC_API_URL=' .env | sed 's|.*http://||;s|/api.*||')
   echo "SERVER_HOST=${_OLD_HOST}" >> .env
 fi
 if ! grep -q '^IMAGE_REGISTRY=' .env; then
   echo "" >> .env
-  echo "# ── Published images (added on upgrade) ──" >> .env
-  _MIG_REG="ghcr.io/mamamoblue52"
+  echo "# ── Published images ──" >> .env
+  _MIG_REG="ghcr.io/jaypeedeleon0-lgtm"
   _MIG_TAG="latest"
-  _MIG_USER="mamamoblue52"
+  _MIG_USER="jaypeedeleon0-lgtm"
   ask_secret "License key"                                           _MIG_TOK
   {
     echo "IMAGE_REGISTRY=${_MIG_REG}"
@@ -434,16 +396,11 @@ if ! grep -q '^IMAGE_REGISTRY=' .env; then
   ok "License key saved to .env"
 fi
 
-# ─── Detect upgrade vs fresh install ─────────────────────────────────────────
-# Upgrade mode = .env already existed AND at least the postgres container is up.
-# In upgrade mode we only rebuild and restart the app services (api, web,
-# updater). We never restart postgres or redis — that would risk data loss.
 UPGRADE=false
 if [[ -f .env ]] && $DC ps --status running 2>/dev/null | grep -q postgres; then
   UPGRADE=true
 fi
 
-# ─── 4. Pull published images ────────────────────────────────────────────────
 section "Pulling published images"
 
 IMAGE_REGISTRY=$(grep '^IMAGE_REGISTRY=' .env | cut -d= -f2-)
@@ -452,7 +409,6 @@ GHCR_USER=$(grep '^GHCR_USER=' .env | cut -d= -f2-)
 GHCR_TOKEN=$(grep '^GHCR_TOKEN=' .env | cut -d= -f2-)
 REGISTRY_HOST="${IMAGE_REGISTRY%%/*}"
 
-# Log in to the private registry so the images can be pulled.
 if [[ -n "$GHCR_USER" && -n "$GHCR_TOKEN" ]]; then
   if echo "$GHCR_TOKEN" | docker login "$REGISTRY_HOST" -u "$GHCR_USER" --password-stdin >/dev/null 2>&1; then
     ok "Logged in to ${REGISTRY_HOST} as ${GHCR_USER}"
@@ -480,16 +436,11 @@ $_pull_ok || die "docker compose pull failed after 3 attempts. Check your networ
 
 ok "Images pulled"
 
-# ─── 4b. Redis AOF integrity check ───────────────────────────────────────────
-# Corrupted incremental AOF files (.incr.aof) cause Redis to crash-loop on
-# startup.  This can happen after an unclean shutdown.  We detect and repair
-# them now — before Redis starts — so the service comes up cleanly.
 section "Checking Redis data integrity"
 
 REDIS_VOLUME="netcore_redisdata"
 
 if docker volume inspect "$REDIS_VOLUME" >/dev/null 2>&1; then
-  # Collect all incremental AOF files (newline-separated)
   INCR_FILES=$(docker run --rm \
     -v "${REDIS_VOLUME}:/data" \
     redis:7-alpine \
@@ -500,7 +451,6 @@ if docker volume inspect "$REDIS_VOLUME" >/dev/null 2>&1; then
     AOF_REPAIRED=false
     while IFS= read -r aof_file; do
       [[ -z "$aof_file" ]] && continue
-      # Attempt automated repair first
       if docker run --rm \
            -v "${REDIS_VOLUME}:/data" \
            redis:7-alpine \
@@ -509,8 +459,6 @@ if docker volume inspect "$REDIS_VOLUME" >/dev/null 2>&1; then
         ok "AOF repaired: ${aof_file}"
         AOF_REPAIRED=true
       else
-        # Fix failed — remove the corrupted file and strip it from the manifest.
-        # Redis will recover from the RDB base snapshot on next start.
         warn "AOF repair failed for ${aof_file} — removing (will recover from last snapshot)"
         _aof_basename=$(basename "${aof_file}")
         docker run --rm \
@@ -532,7 +480,6 @@ else
   ok "No existing Redis volume — fresh install"
 fi
 
-# ─── 5. Start / upgrade services ─────────────────────────────────────────────
 section "Starting services"
 
 if [[ "$UPGRADE" == "true" ]]; then
@@ -544,7 +491,6 @@ else
   ok "All containers started"
 fi
 
-# ─── 6. Wait for API to be healthy ───────────────────────────────────────────
 section "Waiting for API to be ready"
 
 TIMEOUT=180
@@ -565,12 +511,8 @@ done
 echo ""
 ok "API is up"
 
-# ─── 7. Database seed ─────────────────────────────────────────────────────────
 section "Seeding database"
 
-# The API CMD already runs 'prisma db push' on startup to apply any schema
-# additions. The seed is idempotent (uses upsert) and safe to re-run — it
-# only creates the admin user and default profile if they don't already exist.
 if $DC exec -T api node /app/apps/api/prisma/seed.js 2>&1 | \
      sed 's/^/  /'; then
   ok "Database seeded"
@@ -578,7 +520,6 @@ else
   warn "Seed step had warnings (admin user may already exist — that is fine)."
 fi
 
-# Seed default DNS target pool (Quad9, OpenDNS, AdGuard, etc.)
 if $DC exec -T api node /app/apps/api/prisma/seed-dns.js 2>&1 | \
      sed 's/^/  /'; then
   ok "DNS target pool seeded"
@@ -586,7 +527,6 @@ else
   warn "DNS seed step had warnings — check server logs."
 fi
 
-# ─── 8. Done ─────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}${GREEN}╔══════════════════════════════════════════════╗${NC}"
 if [[ "$UPGRADE" == "true" ]]; then
@@ -601,14 +541,4 @@ echo -e "  ${BOLD}API${NC}         http://${SERVER_HOST}/api/"
 echo ""
 echo -e "  ${BOLD}Login${NC}       ${ADMIN_EMAIL}"
 echo -e "  ${BOLD}Password${NC}    ${ADMIN_PASS}"
-echo ""
-echo -e "  ${YELLOW}⚠  Change the default password after your first login.${NC}"
-echo ""
-echo -e "  Useful commands:"
-echo -e "    ${CYAN}$DC ps${NC}              — service status"
-echo -e "    ${CYAN}$DC logs -f api${NC}     — API logs"
-echo -e "    ${CYAN}$DC logs -f web${NC}     — web logs"
-echo -e "    ${CYAN}$DC restart api${NC}     — restart API"
-echo -e "    ${CYAN}$DC down${NC}            — stop all services"
-echo -e "    ${CYAN}$DC up -d${NC}           — start all services"
 echo ""

@@ -33,7 +33,7 @@ services:
       - ipoe
 
   api:
-    image: ${IMAGE_REGISTRY:-ghcr.io/deepeyexeven}/netcore-api:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/jaypeedeleon0-lgtm}/netcore-api:${IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
     env_file:
@@ -53,7 +53,7 @@ services:
       - ipoe
 
   web:
-    image: ${IMAGE_REGISTRY:-ghcr.io/deepeyexeven}/netcore-web:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/jaypeedeleon0-lgtm}/netcore-web:${IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
     env_file:
@@ -81,7 +81,7 @@ services:
       - ipoe
 
   updater:
-    image: ${IMAGE_REGISTRY:-ghcr.io/deepeyexeven}/netcore-updater:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/jaypeedeleon0-lgtm}/netcore-updater:${IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
     env_file:
@@ -91,7 +91,7 @@ services:
       # `docker compose up` issued from inside this container resolves relative
       # bind-mount paths (e.g. ./docker/nginx/nginx.conf) against the host.
       REPO_DIR: ${REPO_DIR:-/opt/netcore}
-      IMAGE_REGISTRY: ${IMAGE_REGISTRY:-ghcr.io/deepeyexeven}
+      IMAGE_REGISTRY: ${IMAGE_REGISTRY:-ghcr.io/jaypeedeleon0-lgtm}
       IMAGE_TAG: ${IMAGE_TAG:-latest}
     working_dir: ${REPO_DIR:-/opt/netcore}
     volumes:
