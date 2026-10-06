@@ -254,9 +254,9 @@ else
 
   echo ""
   echo -e "  ${BOLD}License${NC} — required to pull the published containers."
-  IMAGE_REGISTRY="ghcr.io/jaypeedeleon0-lgtm"
+  IMAGE_REGISTRY="ghcr.io/deepeyexeven"
   IMAGE_TAG="latest"
-  GHCR_USER="jaypeedeleon0-lgtm"
+  GHCR_USER="deepeyexeven"
   ask_secret "License key"                                           GHCR_TOKEN
 
   PG_PASS=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
@@ -383,9 +383,9 @@ fi
 if ! grep -q '^IMAGE_REGISTRY=' .env; then
   echo "" >> .env
   echo "# ── Published images ──" >> .env
-  _MIG_REG="ghcr.io/jaypeedeleon0-lgtm"
+  _MIG_REG="ghcr.io/deepeyexeven"
   _MIG_TAG="latest"
-  _MIG_USER="jaypeedeleon0-lgtm"
+  _MIG_USER="deepeyexeven"
   ask_secret "License key"                                           _MIG_TOK
   {
     echo "IMAGE_REGISTRY=${_MIG_REG}"

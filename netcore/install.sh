@@ -275,9 +275,9 @@ else
 
   echo ""
   echo -e "  ${BOLD}License${NC} — required to pull the published containers."
-  IMAGE_REGISTRY="ghcr.io/mamamoblue52"
+  IMAGE_REGISTRY="ghcr.io/deepeyexeven"
   IMAGE_TAG="latest"
-  GHCR_USER="mamamoblue52"
+  GHCR_USER="deepeyexeven"
   ask_secret "License key"                                           GHCR_TOKEN
 
   # Generate strong random secrets
@@ -421,9 +421,9 @@ fi
 if ! grep -q '^IMAGE_REGISTRY=' .env; then
   echo "" >> .env
   echo "# ── Published images (added on upgrade) ──" >> .env
-  _MIG_REG="ghcr.io/mamamoblue52"
+  _MIG_REG="ghcr.io/deepeyexeven"
   _MIG_TAG="latest"
-  _MIG_USER="mamamoblue52"
+  _MIG_USER="deepeyexeven"
   ask_secret "License key"                                           _MIG_TOK
   {
     echo "IMAGE_REGISTRY=${_MIG_REG}"
