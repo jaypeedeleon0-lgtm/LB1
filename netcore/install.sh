@@ -59,7 +59,7 @@ echo ""
 echo -e "${BOLD}${BLUE}╔══════════════════════════════════════════════╗${NC}"
 printf "${BOLD}${BLUE}║   %-43s║${NC}\n" "${_TITLE}"
 echo -e "${BOLD}${BLUE}║   Smart Load Balancing for MikroTik         ║${NC}"
-echo -e "${BOLD}${BLUE}║   Designed and Developed by John Cabanding  ║${NC}"
+echo -e "${BOLD}${BLUE}║   Designed and Developed by Pee Deleon   ║${NC}"
 echo -e "${BOLD}${BLUE}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 
